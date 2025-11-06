@@ -6,13 +6,13 @@ function cleanPage() {
     const bottom = document.querySelector(".toolbar_bottom");
     if (bottom) bottom.remove();
 
-    // Nếu muốn xóa class document_scroller luôn
     const containers = document.querySelectorAll(".document_scroller");
     containers.forEach(c => c.className = '');
 
     console.log("🧹 Toolbar và container đã được xóa!");
 }
 
+// ---------- Chờ tất cả canvas / img load ----------
 function waitForAllPagesAndClearSafe(callback) {
     const observer = new MutationObserver((mutations, obs) => {
         const pages = document.querySelectorAll("[class*='page']");
@@ -27,93 +27,77 @@ function waitForAllPagesAndClearSafe(callback) {
         });
 
         if (allLoaded && pages.length > 0) {
-            obs.disconnect(); // ngừng quan sát
+            obs.disconnect();
             console.log("✅ All pages loaded (safe)!");
-            if (callback) callback(); // gọi callback nếu có
+            if (callback) callback();
         }
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
 }
 
-function addPrintStyles() {
+// ---------- Tạo thẻ style chung ----------
+function addGlobalStyles() {
     const style = document.createElement("style");
+    style.id = "scribdExtensionStyles";
     style.textContent = `
+        /* ===== Button chung ===== */
+        #scribdPrintBtn, #scribdCleanBtn, #scribdAutoScrollBtn {
+            position: fixed;
+            right: 20px;
+            z-index: 999999;
+            padding: 12px 18px;
+            color: white;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+        }
+        #scribdPrintBtn { top: 20px; background: #ff5722; }
+        #scribdCleanBtn { top: 60px; background: #2196f3; }
+        #scribdAutoScrollBtn { top: 100px; background: #4caf50; }
+
+        /* ===== Ẩn khi in ===== */
         @media print {
-            @page {
-                margin: 0;
+            #scribdPrintBtn, #scribdCleanBtn, #scribdAutoScrollBtn {
+                display: none !important;
             }
-            body, html {
-                margin: 0;
-                padding: 0;
-                overflow: visible !important;
-            }
+            @page { margin: 0; }
+            body, html { margin:0; padding:0; overflow: visible !important; }
             .document_scroller {
                 transform: scale(0.8);
                 transform-origin: top left;
                 display: block;
                 page-break-after: always;
             }
-            .toolbar_top, .toolbar_bottom {
-                display: none !important;
-            }
+            .toolbar_top, .toolbar_bottom { display: none !important; }
         }
     `;
     document.head.appendChild(style);
 }
 
+// ---------- Tạo các nút ----------
 function createPrintButton() {
     const btn = document.createElement("button");
     btn.textContent = "Print PDF";
     btn.id = "scribdPrintBtn";
 
-    Object.assign(btn.style, {
-        position: "fixed",
-        top: "20px",
-        right: "20px",
-        zIndex: "999999",
-        padding: "12px 18px",
-        background: "#ff5722",
-        color: "white",
-        fontSize: "16px",
-        border: "none",
-        borderRadius: "6px",
-        cursor: "pointer",
-        boxShadow: "0 3px 8px rgba(0,0,0,0.25)",
-    });
-
     btn.onclick = () => {
         console.log("🖨 Thêm CSS in...");
-
-        addPrintStyles(); // gọi style in
-
-        // Ẩn nút trước khi mở hộp thoại in
+        // Ẩn nút trước khi print
         btn.style.display = "none";
 
         setTimeout(() => {
             console.log("🖨 Mở hộp thoại in...");
             window.print();
 
-            // Sau khi in xong → hiện lại nút
-            setTimeout(() => {
-                btn.style.display = "block";
-            }, 500);
-
+            // hiện lại nút sau khi print
+            setTimeout(() => { btn.style.display = "block"; }, 500);
         }, 300);
     };
 
     document.body.appendChild(btn);
-
-    // ✅ Ẩn nút khi chế độ print preview
-    const hidePrintBtnCSS = document.createElement("style");
-    hidePrintBtnCSS.textContent = `
-        @media print {
-            #scribdPrintBtn {
-                display: none !important;
-            }
-        }
-    `;
-    document.head.appendChild(hidePrintBtnCSS);
 }
 
 function createCleanPageButton() {
@@ -121,61 +105,21 @@ function createCleanPageButton() {
     btn.textContent = "Clean Page";
     btn.id = "scribdCleanBtn";
 
-    Object.assign(btn.style, {
-        position: "fixed",
-        top: "60px", // khác với nút Print PDF (20px)
-        right: "20px",
-        zIndex: "999999",
-        padding: "12px 18px",
-        background: "#2196f3", // màu khác để phân biệt
-        color: "white",
-        fontSize: "16px",
-        border: "none",
-        borderRadius: "6px",
-        cursor: "pointer",
-        boxShadow: "0 3px 8px rgba(0,0,0,0.25)",
-    });
-
     btn.onclick = () => {
         console.log("🧹 Manual clean triggered");
         cleanPage();
-        waitForAllPagesAndClear();
+        waitForAllPagesAndClearSafe();
     };
 
     document.body.appendChild(btn);
-
-    // Ẩn nút khi in
-    const hideCleanBtnCSS = document.createElement("style");
-    hideCleanBtnCSS.textContent = `
-        @media print {
-            #scribdCleanBtn {
-                display: none !important;
-            }
-        }
-    `;
-    document.head.appendChild(hideCleanBtnCSS);
 }
+
 function createAutoScrollButton() {
     let scrollInterval = null;
-    let scrollSpeed = 120; // px mỗi bước
+    const scrollSpeed = 120;
     const btn = document.createElement("button");
     btn.textContent = "Auto Scroll";
     btn.id = "scribdAutoScrollBtn";
-
-    Object.assign(btn.style, {
-        position: "fixed",
-        top: "100px",
-        right: "20px",
-        zIndex: "999999",
-        padding: "12px 18px",
-        background: "#4caf50",
-        color: "white",
-        fontSize: "16px",
-        border: "none",
-        borderRadius: "6px",
-        cursor: "pointer",
-        boxShadow: "0 3px 8px rgba(0,0,0,0.25)",
-    });
 
     btn.onclick = () => {
         const container = document.querySelector(".document_scroller") || document.body;
@@ -189,34 +133,26 @@ function createAutoScrollButton() {
             btn.textContent = "Stop Scroll";
             scrollInterval = setInterval(() => {
                 container.scrollBy(0, scrollSpeed);
-
-                // stop khi gần cuối container
                 if ((container.scrollTop + container.clientHeight) >= container.scrollHeight) {
                     clearInterval(scrollInterval);
                     scrollInterval = null;
                     btn.textContent = "Auto Scroll";
                     console.log("✅ Reached bottom, auto scroll stopped");
                 }
-            }, 200); // 200ms để lazy-load page kịp
+            }, 200);
             console.log("▶ Auto scroll started");
         }
     };
 
     document.body.appendChild(btn);
-
-    // Ẩn khi in
-    const hideCSS = document.createElement("style");
-    hideCSS.textContent = `
-        @media print {
-            #scribdAutoScrollBtn { display: none !important; }
-        }
-    `;
-    document.head.appendChild(hideCSS);
 }
+
+// ---------- Khởi tạo extension ----------
 window.addEventListener("load", () => {
+    addGlobalStyles();
     createPrintButton();
-    createAutoScrollButton();
     createCleanPageButton();
-    waitForAllPagesAndClear();
-    console.log("✅ Page cleaned, print styles added, waiting for pages to load...");
+    createAutoScrollButton();
+    waitForAllPagesAndClearSafe();
+    console.log("✅ Extension loaded, waiting for pages...");
 });
