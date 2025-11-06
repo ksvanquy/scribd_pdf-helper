@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Scribd PDF Helper",
+  "version": "1.0",
+  "description": "Convert Scribd link, clean page and print PDF",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "permissions": ["tabs", "activeTab", "scripting"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.scribd.com/embeds/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
