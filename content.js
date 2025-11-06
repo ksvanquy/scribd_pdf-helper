@@ -12,31 +12,38 @@ function cleanPage() {
     console.log("🧹 Toolbar và container đã được xóa!");
 }
 
-// ---------- Chờ tất cả canvas / img load ----------
-function waitForAllPagesAndClearSafe(callback) {
-    const observer = new MutationObserver((mutations, obs) => {
-        const pages = document.querySelectorAll("[class*='page']");
-        let allLoaded = true;
-
-        pages.forEach(page => {
-            const canvas = page.querySelector("canvas");
-            if (canvas && canvas.width === 0) allLoaded = false;
-
-            const img = page.querySelector("img");
-            if (img && !img.complete) allLoaded = false;
-        });
-
-        if (allLoaded && pages.length > 0) {
-            obs.disconnect();
-            console.log("✅ All pages loaded (safe)!");
-            if (callback) callback();
-        }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
+// ---------- Lấy tổng số trang từ toolbar ----------
+function getTotalPages() {
+    const span = document.querySelector(".toolbarPager .pageCount[data-e2e='total-pages-embed']");
+    if (!span) return 0;
+    const total = parseInt(span.textContent.replace(/\D/g, ""), 10);
+    return isNaN(total) ? 0 : total;
 }
 
-// ---------- Tạo thẻ style chung ----------
+// ---------- Lấy trang hiện tại từ input ----------
+function getCurrentPage() {
+    const input = document.querySelector(".toolbarPager input[name='page-number-entry']");
+    if (!input) return 0;
+    return parseInt(input.value, 10) || 0;
+}
+
+// ---------- Tạo và cập nhật status indicator ----------
+function createStatusIndicator() {
+    const status = document.createElement("div");
+    status.id = "scribdStatusIndicator";
+    status.textContent = "Page: 0 / 0";
+    document.body.appendChild(status);
+}
+function updateStatus() {
+    const status = document.getElementById("scribdStatusIndicator");
+    if (!status) return;
+
+    const currentPage = getCurrentPage();
+    const totalPages = getTotalPages();
+    status.textContent = `Page: ${currentPage} / ${totalPages}`;
+}
+
+// ---------- Thẻ style chung ----------
 function addGlobalStyles() {
     const style = document.createElement("style");
     style.id = "scribdExtensionStyles";
@@ -58,9 +65,23 @@ function addGlobalStyles() {
         #scribdCleanBtn { top: 60px; background: #2196f3; }
         #scribdAutoScrollBtn { top: 100px; background: #4caf50; }
 
+        /* ===== Status indicator ===== */
+        #scribdStatusIndicator {
+            position: fixed;
+            top: 140px;
+            right: 20px;
+            z-index: 999999;
+            background: rgba(0,0,0,0.7);
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+
         /* ===== Ẩn khi in ===== */
         @media print {
-            #scribdPrintBtn, #scribdCleanBtn, #scribdAutoScrollBtn {
+            #scribdPrintBtn, #scribdCleanBtn, #scribdAutoScrollBtn, #scribdStatusIndicator {
                 display: none !important;
             }
             @page { margin: 0; }
@@ -77,82 +98,80 @@ function addGlobalStyles() {
     document.head.appendChild(style);
 }
 
-// ---------- Tạo các nút ----------
-function createPrintButton() {
+// ---------- Tạo nút với tooltip ----------
+function createButton(id, text, tooltip, onClick) {
     const btn = document.createElement("button");
-    btn.textContent = "Print PDF";
-    btn.id = "scribdPrintBtn";
+    btn.id = id;
+    btn.textContent = text;
+    btn.title = tooltip;
+    btn.onclick = onClick;
+    document.body.appendChild(btn);
+    return btn;
+}
 
-    btn.onclick = () => {
-        console.log("🖨 Thêm CSS in...");
-        // Ẩn nút trước khi print
+// ---------- Nút Print PDF ----------
+function createPrintButton() {
+    createButton("scribdPrintBtn", "Print PDF", "In toàn bộ trang hiện tại", () => {
+        const btn = document.getElementById("scribdPrintBtn");
         btn.style.display = "none";
-
         setTimeout(() => {
-            console.log("🖨 Mở hộp thoại in...");
             window.print();
-
-            // hiện lại nút sau khi print
             setTimeout(() => { btn.style.display = "block"; }, 500);
         }, 300);
-    };
-
-    document.body.appendChild(btn);
+    });
 }
 
+// ---------- Nút Clean Page ----------
 function createCleanPageButton() {
-    const btn = document.createElement("button");
-    btn.textContent = "Clean Page";
-    btn.id = "scribdCleanBtn";
-
-    btn.onclick = () => {
-        console.log("🧹 Manual clean triggered");
+    createButton("scribdCleanBtn", "Clean Page", "Xóa toolbar và container", () => {
         cleanPage();
-        waitForAllPagesAndClearSafe();
-    };
-
-    document.body.appendChild(btn);
+        updateStatus();
+    });
 }
 
+// ---------- Nút Auto Scroll an toàn ----------
 function createAutoScrollButton() {
     let scrollInterval = null;
     const scrollSpeed = 120;
-    const btn = document.createElement("button");
-    btn.textContent = "Auto Scroll";
-    btn.id = "scribdAutoScrollBtn";
 
-    btn.onclick = () => {
+    createButton("scribdAutoScrollBtn", "Auto Scroll", "Cuộn trang tự động, load tất cả pages", () => {
         const container = document.querySelector(".document_scroller") || document.body;
 
         if (scrollInterval) {
             clearInterval(scrollInterval);
             scrollInterval = null;
-            btn.textContent = "Auto Scroll";
+            document.getElementById("scribdAutoScrollBtn").textContent = "Auto Scroll";
             console.log("⏸ Auto scroll stopped");
         } else {
-            btn.textContent = "Stop Scroll";
+            document.getElementById("scribdAutoScrollBtn").textContent = "Stop Scroll";
             scrollInterval = setInterval(() => {
                 container.scrollBy(0, scrollSpeed);
-                if ((container.scrollTop + container.clientHeight) >= container.scrollHeight) {
+                updateStatus();
+
+                const currentPage = getCurrentPage();
+                const totalPages = getTotalPages();
+
+                if (totalPages > 0 && currentPage >= totalPages) {
                     clearInterval(scrollInterval);
                     scrollInterval = null;
-                    btn.textContent = "Auto Scroll";
-                    console.log("✅ Reached bottom, auto scroll stopped");
+                    document.getElementById("scribdAutoScrollBtn").textContent = "Auto Scroll";
+                    console.log("✅ Reached last page, auto scroll stopped");
                 }
             }, 200);
             console.log("▶ Auto scroll started");
         }
-    };
-
-    document.body.appendChild(btn);
+    });
 }
 
 // ---------- Khởi tạo extension ----------
 window.addEventListener("load", () => {
     addGlobalStyles();
+    createStatusIndicator();
     createPrintButton();
     createCleanPageButton();
     createAutoScrollButton();
-    waitForAllPagesAndClearSafe();
     console.log("✅ Extension loaded, waiting for pages...");
+
+    // Cập nhật trạng thái mỗi 500ms
+    setInterval(updateStatus, 500);
 });
